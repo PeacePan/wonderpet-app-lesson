@@ -1,6 +1,18 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
+import 'dart:typed_data';
 
-void main() {
+import 'package:camera/camera.dart';
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vibration/vibration.dart';
+
+late SharedPreferences prefs;
+late List<CameraDescription> _cameras;
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  prefs = await SharedPreferences.getInstance();
+  _cameras = await availableCameras();
   runApp(const MyApp());
 }
 
@@ -55,9 +67,42 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  int _counter = prefs.getInt('counter') ?? 0;
 
-  void _incrementCounter() {
+  late CameraController controller;
+
+  void initState() {
+    controller = CameraController(_cameras[0], ResolutionPreset.max);
+    controller.initialize().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    }).catchError((Object e) {
+      if (e is CameraException) {
+        switch (e.code) {
+          case 'CameraAccessDenied':
+            // Handle access errors here.
+            break;
+          default:
+            // Handle other errors here.
+            break;
+        }
+      }
+    });
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _incrementCounter() async {
+    if (await Vibration.hasVibrator() == true) {
+      Vibration.vibrate(duration: 100);
+    }
     setState(() {
       // This call to setState tells the Flutter framework that something has
       // changed in this State, which causes it to rerun the build method below
@@ -66,6 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // called again, and so nothing would appear to happen.
       _counter++;
     });
+    prefs.setInt('counter', _counter + 1);
   }
 
   @override
@@ -112,6 +158,39 @@ class _MyHomePageState extends State<MyHomePage> {
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            ElevatedButton(
+                onPressed: () async {
+                  if (await Vibration.hasVibrator() == true) {
+                    Vibration.vibrate(duration: 100);
+                  }
+                  final img = await controller.takePicture();
+                  Uint8List captureImage = File(img.path).readAsBytesSync();
+                  String _directory = '';
+                  _directory = '/storage/emulated/0/DCIM';
+                  final path = '$_directory/capturedImage.png';
+                  final imagePath = await File(path).create();
+                  await imagePath.writeAsBytes(captureImage);
+                  // }
+                },
+                child: Text('Take Picture')),
+            SizedBox(
+                height: 100,
+                child: controller.value.isInitialized
+                    ? CameraPreview(controller)
+                    : SizedBox()),
+            ElevatedButton(
+                onPressed: () async {
+                  if (await Vibration.hasVibrator() == true) {
+                    Vibration.vibrate(duration: 100);
+                  }
+                  final dir = await getApplicationSupportDirectory();
+                  //get file
+                  // if (dir != null) {
+                  final file = File('${dir.path}/image.jpg');
+                  debugPrint(file.path);
+                  // }
+                },
+                child: Text('Get Picture')),
           ],
         ),
       ),
