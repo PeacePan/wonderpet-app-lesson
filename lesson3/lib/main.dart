@@ -1,6 +1,20 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
-void main() {
+import 'package:camera/camera.dart';
+import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vibration/vibration.dart';
+
+late SharedPreferences prefs;
+late List<CameraDescription> _cameras;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  prefs = await SharedPreferences.getInstance();
+  _cameras = await availableCameras();
   runApp(const MyApp());
 }
 
@@ -54,10 +68,77 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
+  int _counter = prefs.getInt('counter') ?? 0;
+  late CameraController controller;
+  final MobileScannerController controller2 = MobileScannerController(
+      // required options for the scanner
+      );
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    // Start listening to lifecycle changes.
+    WidgetsBinding.instance.addObserver(this);
+    controller = CameraController(_cameras[0], ResolutionPreset.max);
+    controller.initialize().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    }).catchError((Object e) {
+      if (e is CameraException) {
+        switch (e.code) {
+          case 'CameraAccessDenied':
+            // Handle access errors here.
+            break;
+          default:
+            // Handle other errors here.
+            break;
+        }
+      }
+    });
+    super.initState();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // If the controller is not ready, do not try to start or stop it.
+    // Permission dialogs can trigger lifecycle changes before the controller is ready.
+    if (!controller.value.isInitialized) {
+      return;
+    }
+
+    switch (state) {
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        return;
+      case AppLifecycleState.resumed:
+      // Restart the scanner when the app is resumed.
+      // // Don't forget to resume listening to the barcode events.
+      // _subscription = controller.barcodes.listen(_handleBarcode);
+
+      // unawaited(controller.start());
+      case AppLifecycleState.inactive:
+      // // Stop the scanner when the app is paused.
+      // // Also stop the barcode events subscription.
+      // unawaited(_subscription?.cancel());
+      // _subscription = null;
+      // unawaited(controller.stop());
+    }
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    controller2.dispose();
+    super.dispose();
+  }
+
+  void _incrementCounter() async {
+    if (await Vibration.hasVibrator() == true) {
+      Vibration.vibrate(duration: 5000, amplitude: 100);
+    }
     setState(() {
       // This call to setState tells the Flutter framework that something has
       // changed in this State, which causes it to rerun the build method below
@@ -66,6 +147,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // called again, and so nothing would appear to happen.
       _counter++;
     });
+    prefs.setInt('counter', _counter + 1);
   }
 
   @override
@@ -112,6 +194,22 @@ class _MyHomePageState extends State<MyHomePage> {
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            ElevatedButton(
+                onPressed: () async {
+                  await Permission.storage.request();
+                  final img = await controller.takePicture();
+                  final buffer = await img.readAsBytes();
+                  final dir = '/storage/emulated/0/DCIM';
+                  final file =
+                      await File('${dir}/${DateTime.now()}.jpg').create();
+                  debugPrint('Saving to ${dir}');
+                  await file.writeAsBytes(buffer);
+                  // await img.saveTo('${dir}/${DateTime.now()}.png');
+                },
+                child: const Text('Take Picture')),
+            controller.value.isInitialized
+                ? CameraPreview(controller)
+                : const SizedBox(),
           ],
         ),
       ),
