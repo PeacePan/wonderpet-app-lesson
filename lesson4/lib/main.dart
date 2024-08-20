@@ -1,4 +1,24 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+import 'package:lesson4/auth.dart';
+import 'package:path_provider/path_provider.dart';
+
+PersistCookieJar? _cookieJar;
+final dio = Dio();
+
+/// 取得儲存在本地端 app 資料夾下的 cookie jar
+Future<CookieJar> get cookieJar async {
+  if (_cookieJar == null) {
+    Directory appDocDir = await getApplicationDocumentsDirectory();
+    _cookieJar = PersistCookieJar(storage: FileStorage(appDocDir.path));
+  }
+  return _cookieJar!;
+}
 
 void main() {
   runApp(const MyApp());
@@ -55,16 +75,107 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  String name = '';
+  String email = '';
+  String otp = '';
+  String jwt = '';
+  String displayName = '';
+  void getOtp() async {
+    final dio = Dio(BaseOptions(
+      method: 'POST',
+      headers: {
+        'cache-control': 'no-cache',
+        'accept': ContentType.json,
+      },
+      responseType: ResponseType.json,
+      contentType: Headers.jsonContentType,
+    ));
 
-  void _incrementCounter() {
+    final data = {
+      'query': '''
+mutation Otp(\$name: String!, \$email: String) {
+  otp(name: \$name, email: \$email)
+}
+''',
+      'variables': {'name': name, 'email': email}
+    };
+    final cookieInstance = await cookieJar;
+    dio.interceptors.add(CookieManager(cookieInstance));
+    final response = await dio.post(
+        'https://data-api-development.wonderpet.asia/graphql-omo',
+        data: jsonEncode(data));
+    // final response = await dio.get('https://dart.dev');
+    debugPrint(response.data.toString());
+  }
+
+  void signIn() async {
+    final dio = Dio(BaseOptions(
+      method: 'POST',
+      headers: {
+        'cache-control': 'no-cache',
+        'accept': ContentType.json,
+      },
+      responseType: ResponseType.json,
+      contentType: Headers.jsonContentType,
+    ));
+
+    final data = {
+      'query': '''
+mutation Signin(\$name: String!, \$otp: String!, \$email: String) {
+  signin(name: \$name, otp: \$otp, email: \$email)
+}
+''',
+      'variables': {'name': name, 'email': email, 'otp': otp}
+    };
+    final cookieInstance = await cookieJar;
+    dio.interceptors.add(CookieManager(cookieInstance));
+    final response = await dio.post(
+        'https://data-api-development.wonderpet.asia/graphql-omo',
+        data: jsonEncode(data));
+    debugPrint(response.data['data'].toString());
+    debugPrint(response.data['data']['signin'].toString());
+    // final response = await dio.get('https://dart.dev');
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      jwt = response.data['data']['signin'];
+    });
+  }
+
+  void authenticate() async {
+    final dio = Dio(BaseOptions(
+      method: 'POST',
+      headers: {
+        'cache-control': 'no-cache',
+        'accept': ContentType.json,
+        'authorization': 'Bearer $jwt'
+      },
+      responseType: ResponseType.json,
+      contentType: Headers.jsonContentType,
+    ));
+
+    final data = {
+      'query': '''
+query Authenticate {
+  authenticate {
+    user {
+      displayName
+    }
+  }
+}
+''',
+    };
+    final cookieInstance = await cookieJar;
+    dio.interceptors.add(CookieManager(cookieInstance));
+    setState(() {
+      displayName = '';
+    });
+    final response = await dio.post(
+        'https://data-api-development.wonderpet.asia/graphql-omo',
+        data: jsonEncode(data));
+    debugPrint(response.data['data'].toString());
+    Authentication authentication =
+        Authentication.fromJson(response.data['data']);
+    setState(() {
+      displayName = authentication.authenticate!.user!.displayName;
     });
   }
 
@@ -105,21 +216,61 @@ class _MyHomePageState extends State<MyHomePage> {
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
             Text(
-              '$_counter',
+              '你是：$displayName',
               style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            TextField(
+              onChanged: (value) {
+                setState(() {
+                  name = value;
+                });
+              },
+              decoration: const InputDecoration(
+                hintText: 'name',
+              ),
+            ),
+            TextField(
+              onChanged: (value) {
+                setState(() {
+                  email = value;
+                });
+              },
+              decoration: const InputDecoration(
+                hintText: 'email',
+              ),
+            ),
+            TextField(
+              onChanged: (value) {
+                setState(() {
+                  otp = value;
+                });
+              },
+              decoration: const InputDecoration(
+                hintText: 'otp',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                getOtp();
+              },
+              child: const Text('Otp'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                signIn();
+              },
+              child: const Text('SignIn'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                authenticate();
+              },
+              child: const Text('Who am I?'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
