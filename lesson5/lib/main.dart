@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'sign_in.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -31,7 +33,11 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      initialRoute: '/sign_in',
+      routes: {
+        '/': (context) => const MyHomePage(title: 'Flutter Demo Home Page'),
+        '/sign_in': (context) => const SignInPage(),
+      },
     );
   }
 }

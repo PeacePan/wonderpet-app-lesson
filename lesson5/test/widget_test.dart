@@ -9,22 +9,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:lesson5/main.dart';
+import 'package:lesson5/sign_in.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SignInPage(),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    expect(find.text('門市'), findsOneWidget);
+    expect(find.text('員工編號'), findsOneWidget);
+    expect(find.text('登入'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).last, '190601100a');
+    await tester.tap(find.text('登入'));
     await tester.pump();
+    expect(find.text('員工編號格式輸入錯誤'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).last, '190601100');
+    await tester.tap(find.text('登入'));
+    await tester.pump();
+    expect(find.text('員工編號格式輸入錯誤'), findsNothing);
   });
 }
